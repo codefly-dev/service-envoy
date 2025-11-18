@@ -1,0 +1,16 @@
+# Use official Envoy proxy image
+FROM envoyproxy/envoy:v1.30-latest
+
+# Set the working directory inside the container
+WORKDIR /app
+
+COPY routing/config/envoy.yaml /app/envoy.yaml
+
+# Change the permissions of the file to be readable by all users
+RUN chmod 644 /app/envoy.yaml
+
+# Expose the port Envoy runs on
+EXPOSE 8080
+
+# Command to run Envoy
+CMD ["envoy", "-c", "/app/envoy.yaml"]

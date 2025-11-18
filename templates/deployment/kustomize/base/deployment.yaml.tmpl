@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Service.Name.DNSCase }}
+  namespace: "{{ .Namespace }}"
+spec:
+  replicas: {{ .Replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Service.Name.DNSCase }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Service.Name.DNSCase }}
+        sha: {{ .Sha }}
+    spec:
+      containers:
+        - name: {{ .Service.Name.DNSCase }}
+          image: image:tag
+          volumeMounts:
+            - mountPath: /app/settings/routing.json
+              name: settings
+              subPath: settings
+
+      volumes:
+        - name: settings
+          configMap:
+            name: "cm-{{.Service.Name.DNSCase}}-settings-routines"

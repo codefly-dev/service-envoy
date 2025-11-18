@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "cm-{{.Service.Name.DNSCase}}-settings-routines"
+  namespace: "{{ .Namespace }}"
+data:
+  settings: |
+    {{.Deployment.Parameters.Configuration}}
