@@ -353,64 +353,26 @@ type Parameters struct {
 func (s *Builder) Deploy(ctx context.Context, req *builderv0.DeploymentRequest) (*builderv0.DeploymentResponse, error) {
 	defer s.Wool.Catch()
 
-	s.Builder.LogDeployRequest(req, s.Wool.Debug)
-
-	s.EnvironmentVariables.SetRunning()
-
-	var k *builderv0.KubernetesDeployment
-	var err error
-	if k, err = s.Builder.KubernetesDeploymentRequest(ctx, req); err != nil {
-		return s.Builder.DeployError(err)
-	}
-
-	err = s.EnvironmentVariables.AddEndpoints(ctx,
-		resources.LocalizeNetworkMapping(req.NetworkMappings, "localhost"),
-		resources.NewContainerNetworkAccess())
-	if err != nil {
-		return s.Builder.DeployError(err)
-	}
-
-	err = s.EnvironmentVariables.AddConfigurations(ctx, req.Configuration)
-	if err != nil {
-		return s.Builder.DeployError(err)
-	}
-
-	err = s.EnvironmentVariables.AddConfigurations(ctx, req.DependenciesConfigurations...)
-	if err != nil {
-		return s.Builder.DeployError(err)
-	}
-
-	configs, err := s.EnvironmentVariables.Configurations()
-	if err != nil {
-		return s.Builder.DeployError(err)
-	}
-	cm, err := services.EnvsAsConfigMapData(configs...)
-	if err != nil {
-		return s.Builder.DeployError(err)
-	}
-
-	secrets, err := services.EnvsAsSecretData(s.EnvironmentVariables.Secrets()...)
-	if err != nil {
-		return s.Builder.DeployError(err)
-	}
-
-	conf, err := s.createConfig(ctx, req.DependenciesNetworkMappings, resources.NewContainerNetworkAccess())
-	if err != nil {
-		return nil, s.Wool.Wrapf(err, "cannot write config")
-	}
-
-	params := services.DeploymentParameters{
-		ConfigMap: cm,
-		SecretMap: secrets,
-		Parameters: Parameters{
-			LoadBalancer:  LoadBalancer{},
-			Configuration: string(conf),
+	return s.Builder.DeployKustomize(ctx, req, services.KustomizeDeployment{
+		EnvironmentVariables: s.EnvironmentVariables,
+		Templates:            deploymentFS,
+		Inputs: services.DeploymentInputs{
+			OwnEndpoints:             true,
+			OwnConfiguration:         true,
+			DependencyConfigurations: true,
 		},
-	}
-
-	err = s.Builder.KustomizeDeploy(ctx, req.Environment, k, deploymentFS, params)
-
-	return s.Builder.DeployResponse()
+		Prepare: func(ctx context.Context, deployment *services.KustomizeDeploymentContext) error {
+			configuration, err := s.createConfig(ctx, req.GetDependenciesNetworkMappings(), resources.NewContainerNetworkAccess())
+			if err != nil {
+				return s.Wool.Wrapf(err, "cannot write config")
+			}
+			deployment.Parameters = Parameters{
+				LoadBalancer:  LoadBalancer{},
+				Configuration: string(configuration),
+			}
+			return nil
+		},
+	})
 }
 
 /* Creation */

@@ -37,8 +37,8 @@ type Settings struct {
 
 var runtimeImage = &resources.DockerImage{
 	Name:   "envoyproxy/envoy",
-	Tag:    "v1.30.11",
-	Digest: "sha256:b5cc70f5fe5503858817e897ae1da5d873dc32cbc493790b4e330b8a42c4af9d",
+	Tag:    "v1.38.0",
+	Digest: "sha256:8146b97ee61a42cd216514709e4e3198af75f014974e3d9f310aef9c901fcbdf",
 }
 
 type Extension struct {
