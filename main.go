@@ -4,9 +4,6 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"os"
-	"path"
-	"strings"
 	"github.com/codefly-dev/core/builders"
 	"github.com/codefly-dev/core/configurations"
 	basev0 "github.com/codefly-dev/core/generated/go/codefly/base/v0"
@@ -16,10 +13,14 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"gopkg.in/yaml.v3"
+	"os"
+	"path"
+	"strings"
 
 	"github.com/codefly-dev/core/agents"
 	"github.com/codefly-dev/core/agents/services"
 	agentv0 "github.com/codefly-dev/core/generated/go/codefly/services/agent/v0"
+	runnersbase "github.com/codefly-dev/core/runners/base"
 	"github.com/codefly-dev/core/shared"
 )
 
@@ -34,7 +35,11 @@ var requirements = builders.NewDependencies(agent.Name,
 type Settings struct {
 }
 
-var runtimeImage = &resources.DockerImage{Name: "envoyproxy/envoy", Tag: "v1.30-latest"}
+var runtimeImage = &resources.DockerImage{
+	Name:   "envoyproxy/envoy",
+	Tag:    "v1.30.11",
+	Digest: "sha256:b5cc70f5fe5503858817e897ae1da5d873dc32cbc493790b4e330b8a42c4af9d",
+}
 
 type Extension struct {
 	Exposed   bool `yaml:"exposed"`
@@ -53,8 +58,8 @@ type Service struct {
 	// Access
 	port uint16
 
-	restRoutesLocation  string
-	grpcRoutesLocation  string
+	restRoutesLocation   string
+	grpcRoutesLocation   string
 	customRoutesLocation string
 
 	RestRouteGroups []*RestRouteGroup
@@ -84,17 +89,16 @@ func (s *Service) GetAgentInformation(ctx context.Context, _ *agentv0.AgentInfor
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	return &agentv0.AgentInformation{
-		Capabilities: []*agentv0.Capability{
-			{Type: agentv0.Capability_BUILDER},
-			{Type: agentv0.Capability_RUNTIME},
+	return services.Advertisement{
+		Backends: runnersbase.BackendSupport{
+			Docker: true,
 		},
-		Protocols: []*agentv0.Protocol{
-			{Type: agentv0.Protocol_HTTP},
-			{Type: agentv0.Protocol_GRPC},
+		Protocols: []agentv0.Protocol_Type{
+			agentv0.Protocol_HTTP,
+			agentv0.Protocol_GRPC,
 		},
 		ReadMe: rm,
-	}, nil
+	}.Build(), nil
 }
 
 func NewService() *Service {
@@ -243,10 +247,11 @@ func (s *Service) CreateValidators(ctx context.Context, confs ...*basev0.Configu
 }
 
 func main() {
-	agents.Register(
-		services.NewServiceAgent(agent.Of(resources.ServiceAgent), NewService()),
-		services.NewBuilderAgent(agent.Of(resources.BuilderServiceAgent), NewBuilder()),
-		services.NewRuntimeAgent(agent.Of(resources.RuntimeServiceAgent), NewRuntime()))
+	agents.Serve(agents.PluginRegistration{
+		Agent:   NewService(),
+		Runtime: NewRuntime(),
+		Builder: NewBuilder(),
+	})
 }
 
 //go:embed agent.codefly.yaml

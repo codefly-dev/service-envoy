@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codefly-dev/core/agents"
 	builderv0 "github.com/codefly-dev/core/generated/go/codefly/services/builder/v0"
 	runtimev0 "github.com/codefly-dev/core/generated/go/codefly/services/runtime/v0"
 	"github.com/codefly-dev/core/languages"
@@ -53,7 +52,6 @@ func TestGRPCForwardingNative(t *testing.T) {
 
 func testGRPCForwarding(t *testing.T, runtimeContext *basev0.RuntimeContext) {
 	wool.SetGlobalLogLevel(wool.DEBUG)
-	agents.LogToConsole()
 
 	ctx := context.Background()
 

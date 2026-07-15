@@ -37,9 +37,11 @@ func (imp *ImportRoute) Unique() string {
 }
 
 type Builder struct {
+	services.BuilderServer
 	*Service
 
 	syncForREST []*ImportRoute
+	answers     map[string]*agentv0.Answer
 }
 
 func NewBuilder() *Builder {
@@ -78,12 +80,6 @@ func (s *Builder) Load(ctx context.Context, req *builderv0.LoadRequest) (*builde
 			return nil, err
 		}
 
-		if req.CreationMode.Communicate {
-			err = s.Communication.Register(ctx, communicate.New[builderv0.CreateRequest](s.createCommunicate()))
-			if err != nil {
-				return s.Builder.LoadError(err)
-			}
-		}
 		return s.Builder.LoadResponse()
 	}
 
@@ -170,13 +166,16 @@ func (s *Builder) UnknownRestRoutes(ctx context.Context) ([]*resources.RestRoute
 	}
 	s.Wool.Debug("known route groups", wool.SliceCountField(known))
 
-	return resources.DetectNewRoutesFromEndpoints(ctx, s.DependencyEndpoints, known), nil
+	return resources.DetectNewRoutesFromEndpoints(ctx, s.DependencyEndpoints, known)
 }
 
 func (s *Builder) UpdateAvailableRoutesForSync(ctx context.Context) error {
 	defer s.Wool.Catch()
 
 	newRestRoutes, err := s.UnknownRestRoutes(ctx)
+	if err != nil {
+		return s.Wool.Wrapf(err, "cannot compute unknown REST routes")
+	}
 	s.Wool.Debug("unknown REST groups", wool.SliceCountField(newRestRoutes))
 
 	s.syncForREST = []*ImportRoute{}
@@ -194,12 +193,6 @@ func (s *Builder) UpdateAvailableRoutesForSync(ctx context.Context) error {
 	}
 	s.Wool.Debug("found new routes", wool.SliceCountField(s.syncForREST))
 
-	// register communication for Sync
-	err = s.Communication.Register(ctx, communicate.New[builderv0.SyncRequest](s.syncQuestions()))
-	if err != nil {
-		return s.Wool.Wrapf(err, "cannot communicate for syncForREST")
-	}
-
 	return nil
 }
 
@@ -213,7 +206,7 @@ func hiddenRest(imp *ImportRoute) string {
 	return fmt.Sprintf("hidden-rest-%s", imp.Unique())
 }
 
-func (s *Builder) syncQuestions() *communicate.Sequence {
+func (s *Builder) syncQuestions() []*agentv0.Question {
 	var questions []*agentv0.Question
 	if len(s.syncForREST) > 0 {
 		s.Wool.Info("Detected new REST routes! Let's do some import")
@@ -224,29 +217,22 @@ func (s *Builder) syncQuestions() *communicate.Sequence {
 			communicate.NewChoice(&agentv0.Message{Name: imp.Unique(),
 				Message:     fmt.Sprintf("Want to expose REST route: %s %s for service <%s> from module <%s>", imp.Path, imp.Method, imp.service, imp.module),
 				Description: fmt.Sprintf("Corresponding route on the API service will be /%s/%s%s", imp.module, imp.service, imp.Path)},
-				exposeRestWithoutAuth(imp), // default choice
 				&agentv0.Message{Name: exposeRestWithAuth(imp), Message: "Yes (authenticated)"},
 				&agentv0.Message{Name: exposeRestWithoutAuth(imp), Message: "Yes (non authenticated)"},
 				&agentv0.Message{Name: hiddenRest(imp), Message: "No (internal only)"}),
 		)
 	}
 
-	return communicate.NewSequence(questions...)
+	return questions
 }
 
 func (s *Builder) Sync(ctx context.Context, req *builderv0.SyncRequest) (*builderv0.SyncResponse, error) {
 	defer s.Wool.Catch()
 	ctx = s.Wool.Inject(ctx)
 
-	session, err := s.Communication.Done(ctx, communicate.Channel[builderv0.SyncRequest]())
-	if err != nil {
-		return s.Builder.SyncError(err)
-	}
-	if session == nil {
+	if len(s.syncForREST) == 0 {
 		return s.Builder.SyncResponse()
 	}
-
-	s.Wool.Debug("states", wool.NullableField("answers", session.GetState()))
 
 	restRouteLoader, err := resources.NewExtendedRestRouteLoader[Extension](ctx, s.restRoutesLocation)
 	if err != nil {
@@ -259,9 +245,13 @@ func (s *Builder) Sync(ctx context.Context, req *builderv0.SyncRequest) (*builde
 	}
 
 	for _, imp := range s.syncForREST {
-		exposeOption, err := session.GetChoice(imp.Unique())
+		choice, err := communicate.Choice(s.answers, imp.Unique())
 		if err != nil {
 			return s.Builder.SyncError(err)
+		}
+		exposeOption := ""
+		if choice != nil {
+			exposeOption = choice.Option
 		}
 		group := restRouteLoader.GroupFor(resources.ServiceUnique(imp.module, imp.service), imp.Path)
 		if group == nil {
@@ -390,7 +380,11 @@ func (s *Builder) Deploy(ctx context.Context, req *builderv0.DeploymentRequest) 
 		return s.Builder.DeployError(err)
 	}
 
-	cm, err := services.EnvsAsConfigMapData(s.EnvironmentVariables.Configurations()...)
+	configs, err := s.EnvironmentVariables.Configurations()
+	if err != nil {
+		return s.Builder.DeployError(err)
+	}
+	cm, err := services.EnvsAsConfigMapData(configs...)
 	if err != nil {
 		return s.Builder.DeployError(err)
 	}
@@ -425,21 +419,29 @@ func (s *Builder) Options() []*agentv0.Question {
 	return nil
 }
 
-func (s *Builder) createCommunicate() *communicate.Sequence {
-	return communicate.NewSequence(s.Options()...)
+// Communicate drives the interactive Q&A stream. In sync mode it asks the
+// per-route "expose?" choices computed during Init; otherwise it runs the
+// (currently empty) create-mode Options. Answers are stored on the builder for
+// Sync/Create to read back.
+func (s *Builder) Communicate(stream builderv0.Builder_CommunicateServer) error {
+	asker := communicate.NewQuestionAsker(stream)
+	var questions []*agentv0.Question
+	if len(s.syncForREST) > 0 {
+		questions = s.syncQuestions()
+	} else {
+		questions = s.Options()
+	}
+	answers, err := asker.RunSequence(questions)
+	if err != nil {
+		return err
+	}
+	s.answers = answers
+	return nil
 }
 
 func (s *Builder) Create(ctx context.Context, req *builderv0.CreateRequest) (*builderv0.CreateResponse, error) {
 	defer s.Wool.Catch()
 	ctx = s.Wool.Inject(ctx)
-
-	if s.Builder.CreationMode.Communicate {
-		s.Wool.Debug("using communicate mode")
-		_, err := s.Communication.Done(ctx, communicate.Channel[builderv0.CreateRequest]())
-		if err != nil {
-			return s.Builder.CreateError(err)
-		}
-	}
 
 	err := s.Templates(ctx, s.Information, services.WithFactory(factoryFS))
 	if err != nil {

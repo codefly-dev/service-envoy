@@ -3,19 +3,20 @@ package main
 import (
 	"context"
 	"github.com/codefly-dev/core/agents/helpers/code"
+	"github.com/codefly-dev/core/agents/services"
 	v0 "github.com/codefly-dev/core/generated/go/codefly/base/v0"
-	agentv0 "github.com/codefly-dev/core/generated/go/codefly/services/agent/v0"
 	runtimev0 "github.com/codefly-dev/core/generated/go/codefly/services/runtime/v0"
 	"github.com/codefly-dev/core/resources"
-	runners "github.com/codefly-dev/core/runners/base"
+	dockerrun "github.com/codefly-dev/core/runners/dockerrun"
 	"github.com/codefly-dev/core/wool"
 )
 
 type Runtime struct {
+	services.RuntimeServer
 	*Service
 
 	// internal
-	runner *runners.DockerEnvironment
+	runner *dockerrun.DockerEnvironment
 }
 
 func NewRuntime() *Runtime {
@@ -110,7 +111,7 @@ func (s *Runtime) Init(ctx context.Context, req *runtimev0.InitRequest) (*runtim
 		s.validators = validators
 
 	}
-	
+
 	// Store dependency endpoints for use in Start
 	s.Base.DependencyEndpoints = req.DependenciesEndpoints
 
@@ -135,7 +136,7 @@ func (s *Runtime) Init(ctx context.Context, req *runtimev0.InitRequest) (*runtim
 		}
 	}
 
-	runner, err := runners.NewDockerHeadlessEnvironment(ctx, runtimeImage, s.UniqueWithWorkspace())
+	runner, err := dockerrun.NewDockerHeadlessEnvironment(ctx, runtimeImage, s.UniqueWithWorkspace())
 	if err != nil {
 		return s.Runtime.InitError(err)
 	}
@@ -200,10 +201,6 @@ func (s *Runtime) Stop(ctx context.Context, req *runtimev0.StopRequest) (*runtim
 		}
 	}
 
-	err := s.Base.Stop()
-	if err != nil {
-		return s.Runtime.StopError(err)
-	}
 	return s.Runtime.StopResponse()
 }
 
@@ -213,10 +210,6 @@ func (s *Runtime) Test(ctx context.Context, req *runtimev0.TestRequest) (*runtim
 
 func (s *Runtime) Destroy(ctx context.Context, req *runtimev0.DestroyRequest) (*runtimev0.DestroyResponse, error) {
 	return s.Runtime.DestroyResponse()
-}
-
-func (s *Runtime) Communicate(ctx context.Context, req *agentv0.Engage) (*agentv0.InformationRequest, error) {
-	return s.Base.Communicate(ctx, req)
 }
 
 /* Details

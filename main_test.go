@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codefly-dev/core/agents"
 	builderv0 "github.com/codefly-dev/core/generated/go/codefly/services/builder/v0"
 	runtimev0 "github.com/codefly-dev/core/generated/go/codefly/services/runtime/v0"
 	"github.com/codefly-dev/core/languages"
@@ -53,7 +52,6 @@ func TestRESTForwardingNative(t *testing.T) {
 
 func testRESTForwarding(t *testing.T, runtimeContext *basev0.RuntimeContext) {
 	wool.SetGlobalLogLevel(wool.DEBUG)
-	agents.LogToConsole()
 
 	ctx := context.Background()
 
@@ -137,7 +135,7 @@ func testRESTForwarding(t *testing.T, runtimeContext *basev0.RuntimeContext) {
 	init, err := runtime.Init(ctx, &runtimev0.InitRequest{
 		RuntimeContext:          runtimeContext,
 		ProposedNetworkMappings: networkMappings,
-		DependenciesEndpoints:  createBackendEndpoint(),
+		DependenciesEndpoints:   createBackendEndpoint(),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, init)
@@ -180,16 +178,16 @@ func createMockBackendServer(t *testing.T) *httptest.Server {
 	// Create a custom listener that binds to 0.0.0.0 so it's accessible from Docker
 	listener, err := net.Listen("tcp", "0.0.0.0:0")
 	require.NoError(t, err)
-	
+
 	// Get the actual port
 	addr := listener.Addr().(*net.TCPAddr)
-	
+
 	server := &httptest.Server{
 		Listener: listener,
 		Config:   &http.Server{Handler: mux},
 	}
 	server.Start()
-	
+
 	// Update the URL - use localhost for the test client, but server listens on 0.0.0.0
 	server.URL = fmt.Sprintf("http://127.0.0.1:%d", addr.Port)
 	t.Logf("Created mock backend server listening on 0.0.0.0:%d (accessible at %s)", addr.Port, server.URL)
@@ -263,7 +261,7 @@ func createBackendNetworkMapping(t *testing.T, backendURL string) *basev0.Networ
 	// Native uses localhost
 	containerInstance := resources.NewHTTPNetworkInstance("host.docker.internal", uint16(port), false)
 	containerInstance.Access = resources.NewContainerNetworkAccess()
-	
+
 	nativeInstance := resources.NewHTTPNetworkInstance("localhost", uint16(port), false)
 	nativeInstance.Access = resources.NewNativeNetworkAccess()
 
@@ -315,7 +313,7 @@ func testForwarding(t *testing.T, runtime *Runtime, ctx context.Context, network
 
 	// Wait for envoy to be ready and clusters to be initialized
 	time.Sleep(5 * time.Second)
-	
+
 	// Check Envoy admin interface to verify cluster health (admin is on port 9901)
 	adminURL := "http://localhost:9901/clusters"
 	t.Logf("Checking Envoy admin at %s", adminURL)
@@ -360,6 +358,10 @@ func testForwarding(t *testing.T, runtime *Runtime, ctx context.Context, network
 			defer response.Body.Close()
 
 			t.Logf("Response status: %d", response.StatusCode)
+			if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusServiceUnavailable {
+				body, _ := io.ReadAll(response.Body)
+				t.Logf("non-success response body: %s", string(body))
+			}
 			if response.StatusCode == 503 {
 				body, _ := io.ReadAll(response.Body)
 				t.Logf("503 response body: %s", string(body))
@@ -437,4 +439,3 @@ func testForwarding(t *testing.T, runtime *Runtime, ctx context.Context, network
 		t.Logf("Successfully forwarded health check through envoy: %s", string(body))
 	})
 }
-
