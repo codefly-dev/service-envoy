@@ -3,7 +3,7 @@ module github.com/codefly-dev/service-envoy
 go 1.25.0
 
 require (
-	github.com/codefly-dev/core v0.2.18
+	github.com/codefly-dev/core v0.2.19
 	github.com/stretchr/testify v1.11.1
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
@@ -71,6 +71,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/shirou/gopsutil/v3 v3.24.5 // indirect
 	github.com/shoenig/go-m1cpu v0.2.1 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
