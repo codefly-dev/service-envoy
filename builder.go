@@ -286,6 +286,20 @@ func (s *Builder) Sync(ctx context.Context, req *builderv0.SyncRequest) (*builde
 	return s.Builder.SyncResponse()
 }
 
+// Envoy's generated image only adds configuration to this digest-pinned base,
+// so the base inventory is authoritative for executable packages.
+func (s *Builder) Audit(ctx context.Context, req *builderv0.AuditRequest) (*builderv0.AuditResponse, error) {
+	defer s.Wool.Catch()
+	ctx = s.Wool.Inject(ctx)
+	return s.Builder.AuditContainer(ctx, req, runtimeImage.FullName())
+}
+
+func (s *Builder) SBOM(ctx context.Context, _ *builderv0.SBOMRequest) (*builderv0.SBOMResponse, error) {
+	defer s.Wool.Catch()
+	ctx = s.Wool.Inject(ctx)
+	return s.Builder.SBOMContainer(ctx, runtimeImage.FullName())
+}
+
 type Env struct {
 	Key   string
 	Value string
