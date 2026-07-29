@@ -123,7 +123,7 @@ func testRESTForwarding(t *testing.T, runtimeContext *basev0.RuntimeContext) {
 	require.NoError(t, err)
 	networkManager.WithTemporaryPorts()
 
-	networkMappings, err := networkManager.GenerateNetworkMappings(ctx, env, workspace, runtime.Identity, runtime.Endpoints)
+	networkMappings, err := networkManager.GenerateNetworkMappings(ctx, env, workspace, runtime.Identity, runtime.Endpoints, runtimeContext)
 	require.NoError(t, err)
 	require.NotNil(t, networkMappings)
 	require.Equal(t, 1, len(networkMappings))

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Service.Name.DNSCase }}
-  namespace: "{{ .Namespace }}"
+  namespace: {{ .Namespace }}
 spec:
   replicas: {{ .Replicas }}
   selector:
@@ -14,15 +14,84 @@ spec:
         app: {{ .Service.Name.DNSCase }}
         sha: {{ .Sha }}
     spec:
+      # uid 101 is the `envoy` user baked into the envoyproxy/envoy image.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
       containers:
         - name: {{ .Service.Name.DNSCase }}
-          image: image:tag
+          image: {{ .Image }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 101
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: admin
+              containerPort: 9901
+{{- if and .GitOps .SecretReferences }}
+          env:
+{{- range $key, $reference := .SecretReferences }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $reference.Name }}
+                  key: {{ $reference.Key }}
+{{- end }}
+{{- end }}
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+          # Envoy's admin listener serves /ready — a 200 means the proxy has
+          # a live config and its listeners are up.
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: admin
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: admin
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: admin
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
           volumeMounts:
             - mountPath: /app/settings/routing.json
               name: settings
               subPath: settings
-
+            # readOnlyRootFilesystem=true, so Envoy's scratch space needs an
+            # explicit writable mount.
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: settings
           configMap:
             name: "cm-{{.Service.Name.DNSCase}}-settings-routines"
+        - name: tmp
+          emptyDir: {}

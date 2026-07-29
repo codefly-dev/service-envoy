@@ -1,6 +1,9 @@
+{{- if not .GitOps }}
 apiVersion: v1
 kind: Namespace
 metadata:
   name: "{{ .Namespace }}"
   labels:
     istio-injection: "enabled"
+    app.kubernetes.io/managed-by: codefly
+{{- end }}
