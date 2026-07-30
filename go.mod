@@ -3,7 +3,7 @@ module github.com/codefly-dev/service-envoy
 go 1.25.12
 
 require (
-	github.com/codefly-dev/core v0.2.52
+	github.com/codefly-dev/core v0.2.59
 	github.com/stretchr/testify v1.11.1
 	google.golang.org/grpc v1.82.1
 	google.golang.org/protobuf v1.36.11

@@ -43,7 +43,7 @@ spec:
               containerPort: 8080
             - name: admin
               containerPort: 9901
-{{- if and .GitOps .SecretReferences }}
+{{- if and .Restricted .SecretReferences }}
           env:
 {{- range $key, $reference := .SecretReferences }}
             - name: {{ $key }}
