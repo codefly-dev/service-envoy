@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: codefly-dev/core/.github/workflows/go-service-ci.yml@main
+
+  manifest-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Kubernetes manifest boundary and conformance
+        run: go test ./... -run '^TestDeploy' -count=1

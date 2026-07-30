@@ -5,4 +5,4 @@ metadata:
   namespace: "{{ .Namespace }}"
 data:
   settings: |
-    {{.Deployment.Parameters.Configuration}}
+{{ indent 4 .Deployment.Parameters.Configuration }}

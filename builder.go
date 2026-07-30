@@ -354,6 +354,11 @@ func (s *Builder) Build(ctx context.Context, req *builderv0.BuildRequest) (*buil
 
 }
 
+// deploymentListenerPort is the port Envoy's ingress listener binds inside the
+// Kubernetes pod. It must stay aligned with the container port and the Service
+// targetPort declared in templates/deployment.
+const deploymentListenerPort uint16 = 8080
+
 type LoadBalancer struct {
 	Enabled bool
 	Host    string
@@ -376,7 +381,7 @@ func (s *Builder) Deploy(ctx context.Context, req *builderv0.DeploymentRequest) 
 			DependencyConfigurations: true,
 		},
 		Prepare: func(ctx context.Context, deployment *services.KustomizeDeploymentContext) error {
-			configuration, err := s.createConfig(ctx, req.GetDependenciesNetworkMappings(), resources.NewContainerNetworkAccess())
+			configuration, err := s.createConfig(ctx, req.GetDependenciesNetworkMappings(), resources.NewContainerNetworkAccess(), deploymentListenerPort)
 			if err != nil {
 				return s.Wool.Wrapf(err, "cannot write config")
 			}
