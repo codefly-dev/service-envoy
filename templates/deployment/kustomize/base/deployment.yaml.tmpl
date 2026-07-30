@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Service.Name.DNSCase }}
-  namespace: {{ .Namespace }}
+  namespace: "{{ .Namespace }}"
 spec:
   replicas: {{ .Replicas }}
   selector:
@@ -28,6 +28,10 @@ spec:
         - name: {{ .Service.Name.DNSCase }}
           image: {{ .Image }}
           imagePullPolicy: IfNotPresent
+          command:
+            - envoy
+            - -c
+            - /codefly/config/envoy.yaml
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
@@ -82,7 +86,7 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 3
           volumeMounts:
-            - mountPath: /app/settings/routing.json
+            - mountPath: /codefly/config/envoy.yaml
               name: settings
               subPath: settings
             # readOnlyRootFilesystem=true, so Envoy's scratch space needs an

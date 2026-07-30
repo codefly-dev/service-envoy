@@ -22,4 +22,4 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Kubernetes manifest boundary and conformance
-        run: go test ./... -run '^TestDeploymentTemplates$' -count=1
+        run: go test ./... -run '^TestDeploy' -count=1

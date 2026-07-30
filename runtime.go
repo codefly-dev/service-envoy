@@ -164,7 +164,7 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev0.StartRequest) (*runt
 
 	// Envoy always runs in Docker, so use ContainerNetworkAccess to reach backends
 	// This allows Envoy (in Docker) to reach backends on the host via host.docker.internal
-	err := s.writeConfigWithEndpoints(ctx, req.DependenciesNetworkMappings, s.Base.DependencyEndpoints, resources.NewContainerNetworkAccess())
+	err := s.writeConfigWithEndpoints(ctx, req.DependenciesNetworkMappings, s.Base.DependencyEndpoints, resources.NewContainerNetworkAccess(), s.port)
 	if err != nil {
 		return s.Runtime.StartError(err)
 	}

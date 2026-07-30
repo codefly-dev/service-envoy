@@ -2,6 +2,8 @@ module github.com/codefly-dev/service-envoy
 
 go 1.25.12
 
+toolchain go1.26.5
+
 require (
 	github.com/codefly-dev/core v0.2.59
 	github.com/stretchr/testify v1.11.1

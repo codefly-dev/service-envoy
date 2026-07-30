@@ -177,11 +177,11 @@ type JWTAuthValidator struct {
 }
 
 func (s *Service) writeConfig(ctx context.Context, nms []*basev0.NetworkMapping, networkAccess *basev0.NetworkAccess) error {
-	return s.writeConfigWithEndpoints(ctx, nms, nil, networkAccess)
+	return s.writeConfigWithEndpoints(ctx, nms, nil, networkAccess, s.port)
 }
 
-func (s *Service) writeConfigWithEndpoints(ctx context.Context, nms []*basev0.NetworkMapping, dependencyEndpoints []*basev0.Endpoint, networkAccess *basev0.NetworkAccess) error {
-	conf, err := s.createConfigWithEndpoints(ctx, nms, dependencyEndpoints, networkAccess)
+func (s *Service) writeConfigWithEndpoints(ctx context.Context, nms []*basev0.NetworkMapping, dependencyEndpoints []*basev0.Endpoint, networkAccess *basev0.NetworkAccess, listenerPort uint16) error {
+	conf, err := s.createConfigWithEndpoints(ctx, nms, dependencyEndpoints, networkAccess, listenerPort)
 	if err != nil {
 		return s.Wool.Wrapf(err, "cannot create config")
 	}
@@ -193,11 +193,15 @@ func (s *Service) writeConfigWithEndpoints(ctx context.Context, nms []*basev0.Ne
 	return nil
 }
 
-func (s *Service) createConfig(ctx context.Context, otherNetworkMappings []*basev0.NetworkMapping, networkAccess *basev0.NetworkAccess) ([]byte, error) {
-	return s.createConfigWithEndpoints(ctx, otherNetworkMappings, nil, networkAccess)
+func (s *Service) createConfig(ctx context.Context, otherNetworkMappings []*basev0.NetworkMapping, networkAccess *basev0.NetworkAccess, listenerPort uint16) ([]byte, error) {
+	return s.createConfigWithEndpoints(ctx, otherNetworkMappings, nil, networkAccess, listenerPort)
 }
 
-func (s *Service) createConfigWithEndpoints(ctx context.Context, otherNetworkMappings []*basev0.NetworkMapping, dependencyEndpoints []*basev0.Endpoint, networkAccess *basev0.NetworkAccess) ([]byte, error) {
+// createConfigWithEndpoints renders the Envoy bootstrap. listenerPort is the
+// port the ingress listener binds: the local runtime and the Kubernetes
+// deployment bind different ports, so the caller supplies it explicitly rather
+// than reading ambient service state.
+func (s *Service) createConfigWithEndpoints(ctx context.Context, otherNetworkMappings []*basev0.NetworkMapping, dependencyEndpoints []*basev0.Endpoint, networkAccess *basev0.NetworkAccess, listenerPort uint16) ([]byte, error) {
 	config := EnvoyConfig{
 		StaticResources: StaticResources{
 			Listeners: []Listener{},
@@ -219,7 +223,7 @@ func (s *Service) createConfigWithEndpoints(ctx context.Context, otherNetworkMap
 		Address: Address{
 			SocketAddress: SocketAddress{
 				Address:   "0.0.0.0",
-				PortValue: s.port,
+				PortValue: listenerPort,
 			},
 		},
 		FilterChains: []FilterChain{},
