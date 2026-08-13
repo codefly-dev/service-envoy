@@ -6,11 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/codefly-dev/core/agents/services"
 	basev0 "github.com/codefly-dev/core/generated/go/codefly/base/v0"
 	builderv0 "github.com/codefly-dev/core/generated/go/codefly/services/builder/v0"
 	"github.com/codefly-dev/core/resources"
-	"github.com/codefly-dev/core/wool"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -35,17 +33,27 @@ func deployManifests(t *testing.T, environment, namespace, destination string, p
 	t.Helper()
 	ctx := context.Background()
 
-	identity := &resources.ServiceIdentity{Workspace: "workspace", Module: "mod", Name: "envoy", Version: "0.0.0"}
-	base := &services.Base{
-		Wool:                 wool.Get(ctx),
-		Identity:             identity,
-		Information:          &services.Information{Service: resources.ToServiceWithCase(identity), Module: resources.ToModuleWithCase(identity)},
-		EnvironmentVariables: resources.NewEnvironmentVariableManager(),
-	}
-	base.Builder = &services.BuilderWrapper{Base: base}
-	base.SetDockerImage(runtimeImage)
+	workspacePath := t.TempDir()
+	service := &resources.Service{Name: "envoy", Version: "0.0.0"}
+	require.NoError(t, service.SaveAtDir(ctx, filepath.Join(workspacePath, "mod", "envoy")))
 
-	builder := &Builder{Service: &Service{Base: base, Settings: &Settings{}}}
+	identity := &basev0.ServiceIdentity{
+		Workspace:           "workspace",
+		Module:              "mod",
+		Name:                service.Name,
+		Version:             service.Version,
+		WorkspacePath:       workspacePath,
+		RelativeToWorkspace: filepath.Join("mod", service.Name),
+	}
+
+	builder := NewBuilder()
+	loadResponse, err := builder.Load(ctx, &builderv0.LoadRequest{
+		Identity:     identity,
+		CreationMode: &builderv0.CreationMode{Communicate: false},
+	})
+	require.NoError(t, err)
+	require.Equal(t, builderv0.LoadStatus_READY, loadResponse.GetState().GetState())
+	builder.SetDockerImage(runtimeImage)
 
 	req := &builderv0.DeploymentRequest{
 		Environment: &basev0.Environment{Name: environment},
@@ -62,7 +70,7 @@ func deployManifests(t *testing.T, environment, namespace, destination string, p
 
 	resp, err := builder.Deploy(ctx, req)
 	require.NoError(t, err)
-	require.NotNil(t, resp)
+	require.Equal(t, builderv0.DeploymentStatus_SUCCESS, resp.GetState().GetState())
 }
 
 func TestManifestGuardRender(t *testing.T) {
