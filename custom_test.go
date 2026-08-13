@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -160,7 +161,14 @@ func createMockAdminServer(t *testing.T) *httptest.Server {
 		fmt.Fprintf(w, `{"roles": ["admin", "user"], "endpoint": "admin"}`)
 	})
 
-	server := httptest.NewServer(mux)
+	listener, err := net.Listen("tcp", "0.0.0.0:0")
+	require.NoError(t, err)
+	server := &httptest.Server{
+		Listener: listener,
+		Config:   &http.Server{Handler: mux},
+	}
+	server.Start()
+	server.URL = fmt.Sprintf("http://127.0.0.1:%d", listener.Addr().(*net.TCPAddr).Port)
 	t.Logf("Created mock admin server at: %s", server.URL)
 	return server
 }
@@ -181,7 +189,14 @@ func createMockAuthServer(t *testing.T) *httptest.Server {
 		fmt.Fprintf(w, `{"message": "logged out", "endpoint": "auth"}`)
 	})
 
-	server := httptest.NewServer(mux)
+	listener, err := net.Listen("tcp", "0.0.0.0:0")
+	require.NoError(t, err)
+	server := &httptest.Server{
+		Listener: listener,
+		Config:   &http.Server{Handler: mux},
+	}
+	server.Start()
+	server.URL = fmt.Sprintf("http://127.0.0.1:%d", listener.Addr().(*net.TCPAddr).Port)
 	t.Logf("Created mock auth server at: %s", server.URL)
 	return server
 }
