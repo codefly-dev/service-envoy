@@ -20,6 +20,19 @@ import (
 // which includes the manifest failing Core's static conformance contract.
 func deployToDir(t *testing.T, namespace string) string {
 	t.Helper()
+	destination := t.TempDir()
+	deployManifests(
+		t,
+		"test",
+		namespace,
+		destination,
+		builderv0.KubernetesOutputProfile_KUBERNETES_OUTPUT_PROFILE_EPHEMERAL_LOCAL_APPLY_V1,
+	)
+	return destination
+}
+
+func deployManifests(t *testing.T, environment, namespace, destination string, profile builderv0.KubernetesOutputProfile) {
+	t.Helper()
 	ctx := context.Background()
 
 	identity := &resources.ServiceIdentity{Workspace: "workspace", Module: "mod", Name: "envoy", Version: "0.0.0"}
@@ -30,19 +43,18 @@ func deployToDir(t *testing.T, namespace string) string {
 		EnvironmentVariables: resources.NewEnvironmentVariableManager(),
 	}
 	base.Builder = &services.BuilderWrapper{Base: base}
-	base.SetDockerImage(resources.NewDockerImage("envoyproxy/envoy:v1.38.0"))
+	base.SetDockerImage(runtimeImage)
 
 	builder := &Builder{Service: &Service{Base: base, Settings: &Settings{}}}
 
-	destination := t.TempDir()
 	req := &builderv0.DeploymentRequest{
-		Environment: &basev0.Environment{Name: "test"},
+		Environment: &basev0.Environment{Name: environment},
 		Deployment: &builderv0.Deployment{
 			Kind: &builderv0.Deployment_Kubernetes{
 				Kubernetes: &builderv0.KubernetesDeployment{
 					Namespace:   namespace,
 					Destination: destination,
-					Profile:     builderv0.KubernetesOutputProfile_KUBERNETES_OUTPUT_PROFILE_EPHEMERAL_LOCAL_APPLY_V1,
+					Profile:     profile,
 				},
 			},
 		},
@@ -51,7 +63,24 @@ func deployToDir(t *testing.T, namespace string) string {
 	resp, err := builder.Deploy(ctx, req)
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-	return destination
+}
+
+func TestManifestGuardRender(t *testing.T) {
+	destination := os.Getenv("CODEFLY_MANIFEST_DESTINATION")
+	if destination == "" {
+		t.Skip("run by the manifest guard")
+	}
+
+	environment := os.Getenv("CODEFLY_MANIFEST_ENVIRONMENT")
+	namespace := os.Getenv("CODEFLY_MANIFEST_NAMESPACE")
+	require.NotEmpty(t, environment)
+	require.NotEmpty(t, namespace)
+
+	profileName := os.Getenv("CODEFLY_MANIFEST_PROFILE")
+	profile, ok := builderv0.KubernetesOutputProfile_value[profileName]
+	require.Truef(t, ok, "unknown CODEFLY_MANIFEST_PROFILE %q", profileName)
+
+	deployManifests(t, environment, namespace, destination, builderv0.KubernetesOutputProfile(profile))
 }
 
 func decodeYAMLFile(t *testing.T, path string) map[string]any {
