@@ -1,3 +1,4 @@
 publisher: codefly.dev
+kind: service
 name: envoy
 version: 0.0.7
