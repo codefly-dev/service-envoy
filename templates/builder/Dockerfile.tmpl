@@ -4,7 +4,7 @@ FROM envoyproxy/envoy:v1.38.0@sha256:8146b97ee61a42cd216514709e4e3198af75f014974
 # Set the working directory inside the container
 WORKDIR /app
 
-COPY routing/config/envoy.yaml /app/envoy.yaml
+COPY builder/envoy.yaml /app/envoy.yaml
 
 # Change the permissions of the file to be readable by all users
 RUN chmod 644 /app/envoy.yaml
