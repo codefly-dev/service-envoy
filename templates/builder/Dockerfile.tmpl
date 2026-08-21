@@ -4,6 +4,10 @@ FROM envoyproxy/envoy:v1.38.0@sha256:8146b97ee61a42cd216514709e4e3198af75f014974
 # Set the working directory inside the container
 WORKDIR /app
 
+# COPY sources must stay under builder/: the CLI-owned build renders this recipe
+# into an output_directory that holds only builder/, and builds it with that
+# directory as the context. A COPY that reaches a service file outside builder/
+# builds under the legacy in-agent path but fails under the recipe path.
 COPY builder/envoy.yaml /app/envoy.yaml
 
 # Change the permissions of the file to be readable by all users
