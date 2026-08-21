@@ -78,6 +78,75 @@ func TestBuildContextContainsCopySources(t *testing.T) {
 	require.EqualValues(t, deploymentListenerPort, listenerPort)
 }
 
+// TestBuildEmitsRecipeForOutputDirectory covers the CLI-owned build path: when
+// the caller sends output_directory, Build renders the recipe there and returns
+// a DockerBuildPlan instead of building in-process. The plan must pass the
+// CLI-side VerifyDockerBuildPlan check, and the recipe tree must be
+// self-contained — every COPY source the Dockerfile names present under the
+// build context — so a consumer without the codefly toolchain can buildx it.
+func TestBuildEmitsRecipeForOutputDirectory(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	service := &resources.Service{Name: "envoy", Version: "0.0.0"}
+	require.NoError(t, service.SaveAtDir(ctx, filepath.Join(tmpDir, "mod", "envoy")))
+
+	identity := &basev0.ServiceIdentity{
+		Workspace:           "workspace",
+		Module:              "mod",
+		Name:                service.Name,
+		Version:             service.Version,
+		WorkspacePath:       tmpDir,
+		RelativeToWorkspace: filepath.Join("mod", service.Name),
+	}
+
+	builder := NewBuilder()
+	_, err := builder.Load(ctx, &builderv0.LoadRequest{
+		Identity:     identity,
+		CreationMode: &builderv0.CreationMode{Communicate: false},
+	})
+	require.NoError(t, err)
+
+	_, err = builder.Create(ctx, &builderv0.CreateRequest{})
+	require.NoError(t, err)
+
+	outDir := t.TempDir()
+	resp, err := builder.Build(ctx, &builderv0.BuildRequest{
+		OutputDirectory: outDir,
+		BuildContext: &builderv0.BuildContext{
+			Kind: &builderv0.BuildContext_DockerBuildContext{
+				DockerBuildContext: &builderv0.DockerBuildContext{
+					DockerRepository: "registry.example.com/team",
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, builderv0.BuildStatus_SUCCESS, resp.GetState().GetState())
+
+	plan := resp.GetResult().GetDockerBuildPlan()
+	require.NotNil(t, plan, "expected a DockerBuildPlan, not a legacy in-agent build result")
+	require.Nil(t, resp.GetResult().GetDockerBuildResult(), "recipe path must not report in-agent images")
+
+	require.NoError(t, services.VerifyDockerBuildPlan(outDir, plan), "the CLI must be able to verify the emitted plan")
+
+	require.Len(t, plan.GetRecipes(), 1)
+	recipe := plan.GetRecipes()[0]
+	require.Equal(t, "builder/Dockerfile", recipe.GetDockerfile())
+	require.Equal(t, ".", recipe.GetContext())
+	require.Equal(t, []string{"linux/amd64", "linux/arm64"}, recipe.GetPlatforms())
+	require.NotEmpty(t, recipe.GetImage())
+
+	dockerfile, err := os.ReadFile(filepath.Join(outDir, recipe.GetDockerfile()))
+	require.NoError(t, err)
+	sources := copySources(string(dockerfile))
+	require.NotEmpty(t, sources, "expected the Dockerfile to COPY at least one file")
+	for _, src := range sources {
+		_, err := os.Stat(filepath.Join(outDir, recipe.GetContext(), src))
+		require.NoErrorf(t, err, "COPY source %q missing from recipe context", src)
+	}
+}
+
 // copySources returns the source argument of each COPY instruction in a
 // Dockerfile, ignoring --flags and the destination.
 func copySources(dockerfile string) []string {
