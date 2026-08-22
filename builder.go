@@ -4,6 +4,8 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"path/filepath"
+
 	"github.com/codefly-dev/core/agents/communicate"
 	dockerhelpers "github.com/codefly-dev/core/agents/helpers/docker"
 	"github.com/codefly-dev/core/agents/services"
@@ -325,6 +327,10 @@ func (s *Builder) Build(ctx context.Context, req *builderv0.BuildRequest) (*buil
 
 	docker := DockerTemplating{}
 
+	if out := req.GetOutputDirectory(); out != "" {
+		return s.buildRecipe(ctx, out, image, docker)
+	}
+
 	err = shared.DeleteFile(ctx, s.Local("builder/Dockerfile"))
 	if err != nil {
 		return s.Builder.BuildError(err)
@@ -352,6 +358,34 @@ func (s *Builder) Build(ctx context.Context, req *builderv0.BuildRequest) (*buil
 
 	return s.Builder.BuildResponse()
 
+}
+
+// buildRecipe renders the Docker recipe (Dockerfile + build context) into the
+// caller-owned output_directory and returns a DockerBuildPlan instead of
+// building in-process. The CLI runs docker buildx from the emitted recipe and
+// pushes a multi-arch manifest list, so the image becomes a reproducible
+// artifact a consumer can rebuild without the agent toolchain.
+func (s *Builder) buildRecipe(ctx context.Context, out string, image *resources.DockerImage, docker DockerTemplating) (*builderv0.BuildResponse, error) {
+	err := s.Templates(ctx, docker, services.WithBuilder(builderFS).WithDestination("%s", filepath.Join(out, "builder")))
+	if err != nil {
+		return s.Builder.BuildError(err)
+	}
+
+	recipe := &builderv0.DockerBuildRecipe{
+		Name:       s.Base.Service.Name,
+		Dockerfile: "builder/Dockerfile",
+		Context:    ".",
+		Image:      image.FullName(),
+		Platforms:  []string{"linux/amd64", "linux/arm64"},
+	}
+
+	plan, err := services.BuildDockerBuildPlan(out, []*builderv0.DockerBuildRecipe{recipe})
+	if err != nil {
+		return s.Builder.BuildError(err)
+	}
+	s.Builder.WithBuildPlan(plan)
+
+	return s.Builder.BuildResponse()
 }
 
 // deploymentListenerPort is the port Envoy's ingress listener binds inside the
