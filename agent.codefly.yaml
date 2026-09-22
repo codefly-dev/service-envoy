@@ -1,7 +1,7 @@
 publisher: codefly.dev
 kind: codefly:service
 name: envoy
-version: 0.0.13
+version: 0.0.14
 release:
   owner: workflow
   workflow: releaser.yml
