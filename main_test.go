@@ -139,6 +139,7 @@ func testRESTForwarding(t *testing.T, runtimeContext *basev0.RuntimeContext) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, init)
+	require.Equal(t, runtimev0.InitStatus_READY, init.Status.State, init.Status.Message)
 
 	defer func() {
 		_, _ = runtime.Stop(ctx, &runtimev0.StopRequest{})
@@ -146,10 +147,11 @@ func testRESTForwarding(t *testing.T, runtimeContext *basev0.RuntimeContext) {
 	}()
 
 	// Start envoy
-	_, err = runtime.Start(ctx, &runtimev0.StartRequest{
+	started, err := runtime.Start(ctx, &runtimev0.StartRequest{
 		DependenciesNetworkMappings: dependencyMappings,
 	})
 	require.NoError(t, err)
+	require.Equal(t, runtimev0.StartStatus_STARTED, started.Status.State, started.Status.Message)
 
 	// Test forwarding through envoy
 	testForwarding(t, runtime, ctx, networkMappings, backendServer)
