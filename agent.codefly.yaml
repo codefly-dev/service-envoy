@@ -1,7 +1,7 @@
 publisher: codefly.dev
 kind: codefly:service
 name: envoy
-version: 0.0.15
+version: 0.0.16
 source:
   directory: .
   agent: codefly.dev/go:0.0.56
