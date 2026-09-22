@@ -4,7 +4,6 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"path/filepath"
 
 	"github.com/codefly-dev/core/agents/communicate"
 	dockerhelpers "github.com/codefly-dev/core/agents/helpers/docker"
@@ -366,14 +365,18 @@ func (s *Builder) Build(ctx context.Context, req *builderv0.BuildRequest) (*buil
 // pushes a multi-arch manifest list, so the image becomes a reproducible
 // artifact a consumer can rebuild without the agent toolchain.
 func (s *Builder) buildRecipe(ctx context.Context, out string, image *resources.DockerImage, docker DockerTemplating) (*builderv0.BuildResponse, error) {
-	err := s.Templates(ctx, docker, services.WithBuilder(builderFS).WithDestination("%s", filepath.Join(out, "builder")))
+	// COPY paths resolve from the service, while the Dockerfile and inventory
+	// resolve from out. Stage the bootstrap in both locations when they differ.
+	err := s.Templates(ctx, docker,
+		services.WithBuilder(builderFS),
+		services.WithBuilder(builderFS).WithDestination("%s", out))
 	if err != nil {
 		return s.Builder.BuildError(err)
 	}
 
 	recipe := &builderv0.DockerBuildRecipe{
 		Name:       s.Base.Service.Name,
-		Dockerfile: "builder/Dockerfile",
+		Dockerfile: "Dockerfile",
 		Context:    ".",
 		Image:      image.FullName(),
 		Platforms:  []string{"linux/amd64", "linux/arm64"},

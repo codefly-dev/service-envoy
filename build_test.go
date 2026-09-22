@@ -134,7 +134,7 @@ func TestBuildEmitsRecipeForOutputDirectory(t *testing.T) {
 
 	require.Len(t, plan.GetRecipes(), 1)
 	recipe := plan.GetRecipes()[0]
-	require.Equal(t, "builder/Dockerfile", recipe.GetDockerfile())
+	require.Equal(t, "Dockerfile", recipe.GetDockerfile())
 	require.Equal(t, ".", recipe.GetContext())
 	require.Equal(t, []string{"linux/amd64", "linux/arm64"}, recipe.GetPlatforms())
 	require.NotEmpty(t, recipe.GetImage())
@@ -144,13 +144,13 @@ func TestBuildEmitsRecipeForOutputDirectory(t *testing.T) {
 	sources := copySources(string(dockerfile))
 	require.NotEmpty(t, sources, "expected the Dockerfile to COPY at least one file")
 	for _, src := range sources {
-		_, err := os.Stat(filepath.Join(outDir, recipe.GetContext(), src))
+		_, err := os.Stat(filepath.Join(builder.Location, recipe.GetContext(), src))
 		require.NoErrorf(t, err, "COPY source %q missing from recipe context", src)
 	}
 }
 
 // TestBuildRecipeDockerfileIsValidDocker runs `docker buildx build --check`
-// over the recipe Build emits into an output_directory, from that directory as
+// over the recipe Build emits into an output_directory, from the service as
 // the context — the frontend validation a consumer without the codefly
 // toolchain gets for free before building. VerifyDockerBuildPlan only checks
 // the tree against the digest; it does not parse the Dockerfile, so an
@@ -205,7 +205,7 @@ func TestBuildRecipeDockerfileIsValidDocker(t *testing.T) {
 	defer cancel()
 	cmd := exec.CommandContext(checkCtx, "docker", "buildx", "build", "--check",
 		"-f", filepath.Join(outDir, filepath.FromSlash(recipe.GetDockerfile())),
-		filepath.Join(outDir, filepath.FromSlash(recipe.GetContext())))
+		filepath.Join(builder.Location, filepath.FromSlash(recipe.GetContext())))
 	out, err := cmd.CombinedOutput()
 	require.NoErrorf(t, err, "docker buildx build --check of the emitted recipe failed:\n%s", out)
 }
